@@ -15,6 +15,7 @@ export default function Toast({ message, onClose, duration = 5000 }: ToastProps)
 
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [duration, onClose]);
 
   return (

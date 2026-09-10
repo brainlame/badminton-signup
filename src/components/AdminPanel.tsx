@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabase';
 import { groupSignupsByCourt } from '../lib/queue';
 import type { Signup } from '../lib/types';
 import { useToast } from '../lib/ToastContext';
+import ConfirmModal from './ConfirmModal';
+
+type ModalType = 'advance' | 'delete' | 'reset' | null;
 
 export default function AdminPanel() {
   const { showToast } = useToast();
@@ -14,6 +17,10 @@ export default function AdminPanel() {
   const [advancingCourt, setAdvancingCourt] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resettingAll, setResettingAll] = useState(false);
+
+  // Modal state
+  const [modalType, setModalType] = useState<ModalType>(null);
+  const [modalData, setModalData] = useState<{ courtNumber?: number; signupId?: string; name?: string }>({});
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -90,10 +97,14 @@ export default function AdminPanel() {
     window.location.href = '/';
   };
 
-  const handleAdvanceQueue = async (courtNumber: number) => {
-    const confirmed = confirm(`Advance the queue for Court ${courtNumber}? This will mark the current group as done.`);
-    if (!confirmed) return;
+  const handleAdvanceQueue = (courtNumber: number) => {
+    setModalType('advance');
+    setModalData({ courtNumber });
+  };
 
+  const confirmAdvanceQueue = async () => {
+    const courtNumber = modalData.courtNumber!;
+    setModalType(null);
     setAdvancingCourt(courtNumber);
 
     // Get all signups for this court
@@ -108,7 +119,7 @@ export default function AdminPanel() {
     }
 
     // Check if we have group_index data
-    const hasGroupIndex = courtSignups[0].group_index !== undefined;
+    const hasGroupIndex = courtSignups.length > 0 && courtSignups[0]?.group_index !== undefined;
 
     let lowestGroupSignups: typeof courtSignups;
 
@@ -138,11 +149,15 @@ export default function AdminPanel() {
     }
   };
 
-  const handleDeleteSignup = async (signupId: string, name: string) => {
-    const confirmed = confirm(`Delete signup for ${name}?`);
-    if (!confirmed) return;
+  const handleDeleteSignup = (signupId: string, name: string) => {
+    setModalType('delete');
+    setModalData({ signupId, name });
+  };
 
-    setDeletingId(signupId);
+  const confirmDeleteSignup = async () => {
+    const { signupId, name } = modalData;
+    setModalType(null);
+    setDeletingId(signupId!);
 
     try {
       const { error } = await supabase
@@ -161,15 +176,12 @@ export default function AdminPanel() {
     }
   };
 
-  const handleResetAll = async () => {
-    const confirmed = confirm(
-      'Reset ALL queues? This will mark all waiting signups as done. This action cannot be undone.'
-    );
-    if (!confirmed) return;
+  const handleResetAll = () => {
+    setModalType('reset');
+  };
 
-    const doubleConfirmed = confirm('Are you absolutely sure? This will clear all queues.');
-    if (!doubleConfirmed) return;
-
+  const confirmResetAll = async () => {
+    setModalType(null);
     setResettingAll(true);
 
     try {
@@ -335,6 +347,39 @@ export default function AdminPanel() {
           View Public Queue
         </a>
       </div>
+
+      {/* Confirmation Modals */}
+      <ConfirmModal
+        isOpen={modalType === 'advance'}
+        title="Advance Queue"
+        message={`Advance the queue for Court ${modalData.courtNumber}? This will mark the current group as done.`}
+        confirmText="Advance"
+        cancelText="Cancel"
+        onConfirm={confirmAdvanceQueue}
+        onCancel={() => setModalType(null)}
+      />
+
+      <ConfirmModal
+        isOpen={modalType === 'delete'}
+        title="Remove Player"
+        message={`Remove ${modalData.name} from the queue?`}
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteSignup}
+        onCancel={() => setModalType(null)}
+        isDestructive
+      />
+
+      <ConfirmModal
+        isOpen={modalType === 'reset'}
+        title="Reset All Queues"
+        message="Reset ALL queues? This will mark all waiting signups as done. This action cannot be undone. Are you absolutely sure?"
+        confirmText="Reset All"
+        cancelText="Cancel"
+        onConfirm={confirmResetAll}
+        onCancel={() => setModalType(null)}
+        isDestructive
+      />
     </div>
   );
 }

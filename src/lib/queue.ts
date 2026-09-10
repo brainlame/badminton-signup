@@ -14,7 +14,7 @@ export function groupSignupsByCourt(signups: Signup[], courtNumber: number): Que
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   // Check if we have group_index data (new system) or need to calculate dynamically (old system)
-  const hasGroupIndex = courtSignups.length > 0 && courtSignups[0].group_index !== undefined;
+  const hasGroupIndex = courtSignups.length > 0 && courtSignups[0]?.group_index !== undefined;
 
   if (hasGroupIndex) {
     // New system: Group by stored group_index (frozen groups)

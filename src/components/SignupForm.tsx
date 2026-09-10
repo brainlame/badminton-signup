@@ -53,41 +53,9 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
 
   const availablePositions = getAvailablePositions();
 
-  // Calculate the timestamp for inserting at a specific group position
-  const calculateInsertTimestamp = (): string | undefined => {
-    const courtSignups = signups
-      .filter(s => s.court_number === courtNumber && s.status === 'waiting')
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-
-    // queuePosition is the group index (0 for Now Playing, 1 for Up Next, etc.)
-    const groupIndex = queuePosition;
-
-    // Check if we have group_index data
-    const hasGroupIndex = courtSignups.length > 0 && courtSignups[0].group_index !== undefined;
-
-    let groupSignups: typeof courtSignups;
-
-    if (hasGroupIndex) {
-      // New system: Get signups in the selected group
-      groupSignups = courtSignups.filter(s => (s.group_index ?? 0) === groupIndex);
-    } else {
-      // Old system: Calculate which signups belong to this group by position
-      const startPos = groupIndex * 4;
-      const endPos = startPos + 4;
-      groupSignups = courtSignups.slice(startPos, endPos);
-    }
-
-    // If the group is empty or there are no signups at all, use current time
-    if (groupSignups.length === 0) {
-      return undefined; // Let database use default
-    }
-
-    // Insert after the last person in this group
-    const lastInGroup = groupSignups[groupSignups.length - 1];
-    if (!lastInGroup) return undefined;
-    const lastTime = new Date(lastInGroup.created_at).getTime();
-    return new Date(lastTime + 1000).toISOString();
-  };
+  // Note: We no longer manipulate timestamps when using group_index.
+  // The group_index field determines which group you're in,
+  // and created_at (natural insertion time) determines order within that group.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,11 +76,8 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
 
     const groupIndex = queuePosition;
 
-    // Check if we have group_index data or need to calculate dynamically
-    const hasGroupIndex = courtSignups.length > 0 && courtSignups[0].group_index !== undefined;
-    const playersInGroup = hasGroupIndex
-      ? courtSignups.filter(s => (s.group_index ?? 0) === groupIndex).length
-      : courtSignups.filter((_, index) => Math.floor(index / 4) === groupIndex).length;
+    // Count how many players are in the selected group
+    const playersInGroup = courtSignups.filter(s => (s.group_index ?? 0) === groupIndex).length;
 
     if (playersInGroup >= 4) {
       const groupLabel = groupIndex === 0 ? 'Now Playing' :
@@ -168,20 +133,13 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
     }
 
     try {
-      const insertTimestamp = calculateInsertTimestamp();
-
-      // Check if we should include group_index (only if migration has been run)
-      // Check ALL signups, not just this court, to see if group_index field exists
-      const hasGroupIndex = signups.length > 0 && signups[0].group_index !== undefined;
-
       const insertData: SignupInsert = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         court_number: courtNumber,
         created_by: currentUserId,
-        ...(insertTimestamp && { created_at: insertTimestamp }),
-        // Only include group_index if the database has been migrated
-        ...(hasGroupIndex && { group_index: queuePosition }),
+        group_index: queuePosition, // Always include group_index - it's a required field in the schema
+        // created_at will use the database default (now()) to determine order within the group
       };
 
       const { error } = await supabase
@@ -200,7 +158,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
                         groupIndex === 2 ? 'On Deck' :
                         `Group ${groupIndex + 1}`;
 
-      showToast(`Signed up successfully on Court ${courtNumber} - ${groupLabel}!`);
+      showToast(`Successfully signed up for Court ${courtNumber} - ${groupLabel}. Refresh to view changes.`);
     } catch (error) {
       console.error('Error signing up:', error);
       showToast('Failed to sign up. Please try again.');

@@ -94,9 +94,9 @@ export default function QueueDisplay() {
 
     if (error) {
       console.error('Error canceling signup:', error);
-      showToast('Failed to cancel signup');
+      showToast('Failed to cancel signup. Please try again.');
     } else {
-      showToast(`Successfully cancelled signup on Court ${courtNumber}`);
+      showToast(`Successfully cancelled signup for Court ${courtNumber}. Refresh to view changes.`);
     }
 
     setCancellingId(null);
