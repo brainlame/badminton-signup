@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../lib/ToastContext';
 
 export default function AdminLogin() {
+  const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,7 +25,7 @@ export default function AdminLogin() {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
-      alert('Please enter your email and password');
+      showToast('Please enter your email and password');
       return;
     }
 
@@ -38,10 +40,11 @@ export default function AdminLogin() {
       if (error) throw error;
 
       // Redirect to admin panel
+      showToast('Login successful! Redirecting...');
       window.location.href = '/admin';
     } catch (error: any) {
       console.error('Error logging in:', error);
-      alert(error.message || 'Failed to log in. Please check your credentials.');
+      showToast(error.message || 'Failed to log in. Please check your credentials.');
     } finally {
       setLoading(false);
     }

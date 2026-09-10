@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { groupSignupsByCourt } from '../lib/queue';
 import type { SignupInsert, Signup } from '../lib/types';
+import { useToast } from '../lib/ToastContext';
 
 interface SignupFormProps {
   signups: Signup[];
@@ -9,6 +10,7 @@ interface SignupFormProps {
 }
 
 export default function SignupForm({ signups, userId }: SignupFormProps) {
+  const { showToast } = useToast();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [courtNumber, setCourtNumber] = useState<number>(1);
@@ -16,85 +18,108 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // Get available queue positions for the selected court
+  // Get available groups for the selected court
   const getAvailablePositions = () => {
     const groups = groupSignupsByCourt(signups, courtNumber);
     const positions = [];
 
-    // Add existing groups (user joins at the end of each group)
+    // Add existing groups
     groups.forEach((group) => {
+      const isFull = group.players.length >= 4;
       positions.push({
         value: group.groupIndex,
-        label: `${group.label} (${group.players.length}/4)`,
+        label: `${group.label} ${isFull ? '(Full)' : `(${group.players.length}/4)`}`,
+        isFull,
       });
     });
 
-    // Add next available group
-    positions.push({
-      value: groups.length,
-      label: groups.length === 0 ? 'Now Playing (0/4)' : `Group ${groups.length + 1} (0/4)`,
-    });
+    // Add future groups up to a total of 5 groups
+    const totalGroupsToShow = 5;
+    for (let i = groups.length; i < totalGroupsToShow; i++) {
+      const label = i === 0 ? 'Now Playing' :
+                    i === 1 ? 'Up Next' :
+                    i === 2 ? 'On Deck' :
+                    `Group ${i + 1}`;
+
+      positions.push({
+        value: i,
+        label: `${label} (0/4)`,
+        isFull: false,
+      });
+    }
 
     return positions;
   };
 
   const availablePositions = getAvailablePositions();
 
-  // Calculate the timestamp for inserting at a specific queue position
+  // Calculate the timestamp for inserting at a specific group position
   const calculateInsertTimestamp = (): string | undefined => {
     const courtSignups = signups
       .filter(s => s.court_number === courtNumber && s.status === 'waiting')
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-    // If no signups exist, use current time
-    if (courtSignups.length === 0) {
+    // queuePosition is the group index (0 for Now Playing, 1 for Up Next, etc.)
+    const groupIndex = queuePosition;
+
+    // Check if we have group_index data
+    const hasGroupIndex = courtSignups.length > 0 && courtSignups[0].group_index !== undefined;
+
+    let groupSignups: typeof courtSignups;
+
+    if (hasGroupIndex) {
+      // New system: Get signups in the selected group
+      groupSignups = courtSignups.filter(s => (s.group_index ?? 0) === groupIndex);
+    } else {
+      // Old system: Calculate which signups belong to this group by position
+      const startPos = groupIndex * 4;
+      const endPos = startPos + 4;
+      groupSignups = courtSignups.slice(startPos, endPos);
+    }
+
+    // If the group is empty or there are no signups at all, use current time
+    if (groupSignups.length === 0) {
       return undefined; // Let database use default
     }
 
-    // Calculate the position in the queue (end of selected group)
-    const targetPosition = (queuePosition * 4) + 3; // End of the group (4th position in group)
-
-    // If inserting at the end of all groups, use time after last signup
-    if (targetPosition >= courtSignups.length) {
-      const lastSignup = courtSignups[courtSignups.length - 1];
-      if (!lastSignup) return undefined;
-      const lastTime = new Date(lastSignup.created_at).getTime();
-      return new Date(lastTime + 1000).toISOString(); // 1 second after
-    }
-
-    // If inserting in the middle, find the right spot
-    // We want to be at position targetPosition, so insert between targetPosition-1 and targetPosition
-    const beforeIndex = Math.min(targetPosition, courtSignups.length - 1);
-    const afterIndex = beforeIndex + 1;
-
-    if (afterIndex < courtSignups.length) {
-      // Insert between two existing signups
-      const beforeSignup = courtSignups[beforeIndex];
-      const afterSignup = courtSignups[afterIndex];
-      if (!beforeSignup || !afterSignup) return undefined;
-      const beforeTime = new Date(beforeSignup.created_at).getTime();
-      const afterTime = new Date(afterSignup.created_at).getTime();
-      const midTime = beforeTime + (afterTime - beforeTime) / 2;
-      return new Date(midTime).toISOString();
-    } else {
-      // Insert after the last one
-      const beforeSignup = courtSignups[beforeIndex];
-      if (!beforeSignup) return undefined;
-      const lastTime = new Date(beforeSignup.created_at).getTime();
-      return new Date(lastTime + 1000).toISOString();
-    }
+    // Insert after the last person in this group
+    const lastInGroup = groupSignups[groupSignups.length - 1];
+    if (!lastInGroup) return undefined;
+    const lastTime = new Date(lastInGroup.created_at).getTime();
+    return new Date(lastTime + 1000).toISOString();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!firstName.trim() || !lastName.trim()) {
-      alert('Please enter your first and last name');
+      showToast('Please enter your first and last name');
       return;
     }
 
     if (firstName.length > 50 || lastName.length > 50) {
-      alert('Names must be less than 50 characters');
+      showToast('Names must be less than 50 characters');
+      return;
+    }
+
+    // Check if selected group is full
+    const courtSignups = signups
+      .filter(s => s.court_number === courtNumber && s.status === 'waiting');
+
+    const groupIndex = queuePosition;
+
+    // Check if we have group_index data or need to calculate dynamically
+    const hasGroupIndex = courtSignups.length > 0 && courtSignups[0].group_index !== undefined;
+    const playersInGroup = hasGroupIndex
+      ? courtSignups.filter(s => (s.group_index ?? 0) === groupIndex).length
+      : courtSignups.filter((_, index) => Math.floor(index / 4) === groupIndex).length;
+
+    if (playersInGroup >= 4) {
+      const groupLabel = groupIndex === 0 ? 'Now Playing' :
+                        groupIndex === 1 ? 'Up Next' :
+                        groupIndex === 2 ? 'On Deck' :
+                        `Group ${groupIndex + 1}`;
+      showToast(`${groupLabel} is full. Please select a different group.`);
       return;
     }
 
@@ -110,7 +135,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
           const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
           if (anonError) {
             console.error('Error creating anonymous session:', anonError);
-            alert('Failed to initialize authentication. Please refresh the page and try again.');
+            showToast('Failed to initialize authentication. Please refresh the page and try again.');
             setLoading(false);
             return;
           }
@@ -120,13 +145,13 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
         }
 
         if (!currentUserId) {
-          alert('Authentication failed. Please refresh the page and try again.');
+          showToast('Authentication failed. Please refresh the page and try again.');
           setLoading(false);
           return;
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-        alert('Failed to initialize authentication. Please refresh the page and try again.');
+        showToast('Failed to initialize authentication. Please refresh the page and try again.');
         setLoading(false);
         return;
       }
@@ -137,7 +162,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
       s => s.created_by === currentUserId && s.status === 'waiting'
     );
     if (existingSignup) {
-      alert('You already have an active signup. Please cancel it first before signing up again.');
+      showToast('You already have an active signup. Please cancel it first before signing up again.');
       setLoading(false);
       return;
     }
@@ -145,12 +170,18 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
     try {
       const insertTimestamp = calculateInsertTimestamp();
 
+      // Check if we should include group_index (only if migration has been run)
+      // Check ALL signups, not just this court, to see if group_index field exists
+      const hasGroupIndex = signups.length > 0 && signups[0].group_index !== undefined;
+
       const insertData: SignupInsert = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         court_number: courtNumber,
         created_by: currentUserId,
         ...(insertTimestamp && { created_at: insertTimestamp }),
+        // Only include group_index if the database has been migrated
+        ...(hasGroupIndex && { group_index: queuePosition }),
       };
 
       const { error } = await supabase
@@ -161,9 +192,18 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
 
       // Successfully signed up - mark as submitted so form disappears
       setSubmitted(true);
+
+      // Calculate the group label for the success message
+      const groupIndex = queuePosition;
+      const groupLabel = groupIndex === 0 ? 'Now Playing' :
+                        groupIndex === 1 ? 'Up Next' :
+                        groupIndex === 2 ? 'On Deck' :
+                        `Group ${groupIndex + 1}`;
+
+      showToast(`Signed up successfully on Court ${courtNumber} - ${groupLabel}!`);
     } catch (error) {
       console.error('Error signing up:', error);
-      alert('Failed to sign up. Please try again.');
+      showToast('Failed to sign up. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -219,8 +259,10 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
             id="courtNumber"
             value={courtNumber}
             onChange={(e) => {
-              setCourtNumber(Number(e.target.value));
-              setQueuePosition(0); // Reset queue position when court changes
+              const newCourt = Number(e.target.value);
+              setCourtNumber(newCourt);
+              // Reset to first available position for the new court
+              setQueuePosition(0);
             }}
             className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={loading}

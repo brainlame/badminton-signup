@@ -4,6 +4,7 @@ create table signups (
   first_name text not null,
   last_name text not null,
   court_number int not null check (court_number in (1,2,3)),
+  group_index int not null default 0 check (group_index >= 0),
   status text not null default 'waiting' check (status in ('waiting', 'done')),
   created_by uuid not null references auth.users(id),
   created_at timestamptz not null default now()

@@ -1,5 +1,6 @@
 ---
 import AdminSignup from '../../components/AdminSignup';
+import { ToastProvider } from '../../lib/ToastContext';
 ---
 
 <html lang="en">
@@ -19,7 +20,9 @@ import AdminSignup from '../../components/AdminSignup';
 			</header>
 
 			<main>
+				<ToastProvider client:only="react">
 				<AdminSignup client:load />
+			</ToastProvider>
 			</main>
 		</div>
 	</body>

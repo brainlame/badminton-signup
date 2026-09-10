@@ -3,14 +3,17 @@ import { supabase } from '../lib/supabase';
 import { groupSignupsByCourt } from '../lib/queue';
 import type { Signup } from '../lib/types';
 import SignupForm from './SignupForm';
+import { useToast } from '../lib/ToastContext';
 
 const MAX_VISIBLE_GROUPS = 5;
 
 export default function QueueDisplay() {
+  const { showToast } = useToast();
   const [signups, setSignups] = useState<Signup[]>([]);
   const [mySignups, setMySignups] = useState<Signup[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
     // Ensure anonymous session exists
@@ -81,7 +84,9 @@ export default function QueueDisplay() {
     }
   }, [signups, userId]);
 
-  const handleCancelSignup = async (signupId: string) => {
+  const handleCancelSignup = async (signupId: string, courtNumber: number) => {
+    setCancellingId(signupId);
+
     const { error } = await supabase
       .from('signups')
       .delete()
@@ -89,8 +94,12 @@ export default function QueueDisplay() {
 
     if (error) {
       console.error('Error canceling signup:', error);
-      alert('Failed to cancel signup');
+      showToast('Failed to cancel signup');
+    } else {
+      showToast(`Successfully cancelled signup on Court ${courtNumber}`);
     }
+
+    setCancellingId(null);
   };
 
   const renderCourt = (courtNumber: number) => {
@@ -224,10 +233,11 @@ export default function QueueDisplay() {
                   </div>
                 </div>
                 <button
-                  onClick={() => handleCancelSignup(signup.id)}
-                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm font-medium"
+                  onClick={() => handleCancelSignup(signup.id, signup.court_number)}
+                  disabled={cancellingId === signup.id}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Cancel
+                  {cancellingId === signup.id ? 'Cancelling...' : 'Cancel'}
                 </button>
               </div>
             ))}

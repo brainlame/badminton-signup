@@ -15,6 +15,7 @@ export interface Database {
           first_name: string
           last_name: string
           court_number: number
+          group_index: number
           status: 'waiting' | 'done'
           created_by: string
           created_at: string
@@ -24,6 +25,7 @@ export interface Database {
           first_name: string
           last_name: string
           court_number: number
+          group_index?: number
           status?: 'waiting' | 'done'
           created_by: string
           created_at?: string
@@ -33,6 +35,7 @@ export interface Database {
           first_name?: string
           last_name?: string
           court_number?: number
+          group_index?: number
           status?: 'waiting' | 'done'
           created_by?: string
           created_at?: string

@@ -1,5 +1,6 @@
 ---
 import QueueDisplay from '../components/QueueDisplay';
+import { ToastProvider } from '../lib/ToastContext';
 ---
 
 <html lang="en">
@@ -19,7 +20,9 @@ import QueueDisplay from '../components/QueueDisplay';
 			</header>
 
 			<main>
+				<ToastProvider client:only="react">
 				<QueueDisplay client:load />
+			</ToastProvider>
 			</main>
 
 			<footer class="text-center mt-12 text-sm text-gray-500">

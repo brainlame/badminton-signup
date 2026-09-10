@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { groupSignupsByCourt } from '../lib/queue';
 import type { Signup } from '../lib/types';
+import { useToast } from '../lib/ToastContext';
 
 export default function AdminPanel() {
+  const { showToast } = useToast();
   const [signups, setSignups] = useState<Signup[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [advancingCourt, setAdvancingCourt] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resettingAll, setResettingAll] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -89,33 +94,55 @@ export default function AdminPanel() {
     const confirmed = confirm(`Advance the queue for Court ${courtNumber}? This will mark the current group as done.`);
     if (!confirmed) return;
 
-    // Get the first 4 waiting signups for this court
+    setAdvancingCourt(courtNumber);
+
+    // Get all signups for this court
     const courtSignups = signups
       .filter(s => s.court_number === courtNumber && s.status === 'waiting')
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-      .slice(0, 4);
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     if (courtSignups.length === 0) {
-      alert('No one waiting for this court');
+      showToast('No one waiting for this court');
+      setAdvancingCourt(null);
       return;
+    }
+
+    // Check if we have group_index data
+    const hasGroupIndex = courtSignups[0].group_index !== undefined;
+
+    let lowestGroupSignups: typeof courtSignups;
+
+    if (hasGroupIndex) {
+      // New system: Find the lowest group_index
+      const lowestGroupIndex = Math.min(...courtSignups.map(s => s.group_index ?? 0));
+      lowestGroupSignups = courtSignups.filter(s => (s.group_index ?? 0) === lowestGroupIndex);
+    } else {
+      // Old system: Take first 4 signups
+      lowestGroupSignups = courtSignups.slice(0, 4);
     }
 
     try {
       const { error } = await supabase
         .from('signups')
         .update({ status: 'done' as const })
-        .in('id', courtSignups.map(s => s.id));
+        .in('id', lowestGroupSignups.map(s => s.id));
 
       if (error) throw error;
+
+      showToast(`Successfully advanced queue for Court ${courtNumber}`);
     } catch (error) {
       console.error('Error advancing queue:', error);
-      alert('Failed to advance queue');
+      showToast('Failed to advance queue');
+    } finally {
+      setAdvancingCourt(null);
     }
   };
 
   const handleDeleteSignup = async (signupId: string, name: string) => {
     const confirmed = confirm(`Delete signup for ${name}?`);
     if (!confirmed) return;
+
+    setDeletingId(signupId);
 
     try {
       const { error } = await supabase
@@ -124,9 +151,13 @@ export default function AdminPanel() {
         .eq('id', signupId);
 
       if (error) throw error;
+
+      showToast(`Successfully removed ${name} from queue`);
     } catch (error) {
       console.error('Error deleting signup:', error);
-      alert('Failed to delete signup');
+      showToast('Failed to delete signup');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -139,6 +170,8 @@ export default function AdminPanel() {
     const doubleConfirmed = confirm('Are you absolutely sure? This will clear all queues.');
     if (!doubleConfirmed) return;
 
+    setResettingAll(true);
+
     try {
       const { error } = await supabase
         .from('signups')
@@ -147,10 +180,12 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      alert('All queues have been reset');
+      showToast('All queues have been reset');
     } catch (error) {
       console.error('Error resetting queues:', error);
-      alert('Failed to reset queues');
+      showToast('Failed to reset queues');
+    } finally {
+      setResettingAll(false);
     }
   };
 
@@ -163,9 +198,10 @@ export default function AdminPanel() {
           <h2 className="text-xl font-bold text-blue-600">Court {courtNumber}</h2>
           <button
             onClick={() => handleAdvanceQueue(courtNumber)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium"
+            disabled={advancingCourt === courtNumber}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Advance Queue
+            {advancingCourt === courtNumber ? 'Advancing...' : 'Advance Queue'}
           </button>
         </div>
 
@@ -189,9 +225,10 @@ export default function AdminPanel() {
                       </span>
                       <button
                         onClick={() => handleDeleteSignup(player.id, `${player.first_name} ${player.last_name}`)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs"
+                        disabled={deletingId === player.id}
+                        className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Remove
+                        {deletingId === player.id ? 'Removing...' : 'Remove'}
                       </button>
                     </li>
                   ))}
@@ -267,9 +304,10 @@ export default function AdminPanel() {
           <div className="space-x-2">
             <button
               onClick={handleResetAll}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium"
+              disabled={resettingAll}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Reset All Queues
+              {resettingAll ? 'Resetting...' : 'Reset All Queues'}
             </button>
             <button
               onClick={handleLogout}

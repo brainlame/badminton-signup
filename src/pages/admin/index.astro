@@ -1,5 +1,6 @@
 ---
 import AdminPanel from '../../components/AdminPanel';
+import { ToastProvider } from '../../lib/ToastContext';
 ---
 
 <html lang="en">
@@ -19,7 +20,9 @@ import AdminPanel from '../../components/AdminPanel';
 			</header>
 
 			<main>
+				<ToastProvider client:only="react">
 				<AdminPanel client:load />
+			</ToastProvider>
 			</main>
 		</div>
 	</body>

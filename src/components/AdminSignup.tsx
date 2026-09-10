@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useToast } from '../lib/ToastContext';
 
 export default function AdminSignup() {
+  const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -11,12 +13,12 @@ export default function AdminSignup() {
     e.preventDefault();
 
     if (!email.trim() || !password.trim()) {
-      alert('Please enter your email and password');
+      showToast('Please enter your email and password');
       return;
     }
 
     if (password.length < 6) {
-      alert('Password must be at least 6 characters');
+      showToast('Password must be at least 6 characters');
       return;
     }
 
@@ -31,9 +33,10 @@ export default function AdminSignup() {
       if (error) throw error;
 
       setSuccess(true);
+      showToast('Account created successfully!');
     } catch (error: any) {
       console.error('Error signing up:', error);
-      alert(error.message || 'Failed to sign up. Please try again.');
+      showToast(error.message || 'Failed to sign up. Please try again.');
     } finally {
       setLoading(false);
     }
