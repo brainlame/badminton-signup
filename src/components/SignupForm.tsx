@@ -112,7 +112,7 @@ export default function SignupForm({ signups, userId, isDataLoading }: SignupFor
     if (email.trim()) {
       const emailRegex = /^[A-Za-z0-9._%+-]+@andrew\.cmu\.edu$/i;
       if (!emailRegex.test(email.trim())) {
-        showToast('Please enter a valid CMU email address (@cmu.edu)');
+        showToast('Please enter a valid CMU email address (@andrew.cmu.edu)');
         return;
       }
     }

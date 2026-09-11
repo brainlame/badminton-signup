@@ -6,69 +6,98 @@ import SignupForm from './SignupForm';
 import { useToast } from '../lib/ToastContext';
 
 const MAX_VISIBLE_GROUPS = 5;
+const COURTS = [1, 2, 3];
+
+type LoadStatus = 'loading' | 'ready' | 'error';
 
 export default function QueueDisplay() {
   const { showToast } = useToast();
   const [signups, setSignups] = useState<Signup[]>([]);
   const [mySignups, setMySignups] = useState<Signup[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<LoadStatus>('loading');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
+  const loading = status === 'loading';
+
+  // Hide the static pre-hydration loader as soon as React takes over.
   useEffect(() => {
-    // Ensure anonymous session exists
-    const initAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-
-        if (!session) {
-          const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-          if (anonError) {
-            console.error('Error creating anonymous session:', anonError);
-            return;
-          }
-          setUserId(anonData.user?.id || null);
-        } else {
-          setUserId(session.user?.id || null);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-      }
-    };
-
-    initAuth();
-  }, []);
-
-  useEffect(() => {
-    // Hide the static loading indicator
     const staticLoader = document.getElementById('app-loading');
     if (staticLoader) {
       staticLoader.style.display = 'none';
     }
+  }, []);
 
-    // Fetch all signups
-    const fetchSignups = async () => {
+  // Step 1: establish the anonymous session.
+  //
+  // This MUST complete before the first read. Reads are RLS-gated to
+  // authenticated users, so querying with only the anon API key returns an
+  // empty list with a 200 status rather than an error - which would render a
+  // confidently empty queue instead of the real one.
+  useEffect(() => {
+    let cancelled = false;
+
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          if (!cancelled) setUserId(session.user.id);
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error) throw error;
+        if (!data.user) throw new Error('Anonymous sign-in returned no user');
+
+        if (!cancelled) setUserId(data.user.id);
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (!cancelled) {
+          setStatus('error');
+          showToast('Could not connect. Please refresh the page.');
+        }
+      }
+    };
+
+    initAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Run once on mount - showToast is stable via context
+
+  // Step 2: once authenticated, load the queue and subscribe to changes.
+  useEffect(() => {
+    if (!userId) return;
+
+    let cancelled = false;
+
+    const fetchSignups = async (isInitialLoad = false) => {
       try {
         const { data, error } = await supabase
           .from('signups')
           .select('*')
           .order('created_at', { ascending: true });
 
-        if (error) {
-          console.error('Error fetching signups:', error);
-          showToast('Failed to load queue data. Please refresh the page.');
-        } else {
-          setSignups(data || []);
-        }
+        if (error) throw error;
+        if (cancelled) return;
+
+        setSignups(data ?? []);
+        setStatus('ready');
       } catch (error) {
-        console.error('Exception fetching signups:', error);
+        console.error('Error fetching signups:', error);
+        if (cancelled) return;
+
+        if (isInitialLoad) {
+          // Never fall through to an empty-looking queue on first load.
+          setStatus('error');
+        }
         showToast('Failed to load queue data. Please refresh the page.');
-      } finally {
-        setLoading(false);
       }
     };
 
-    fetchSignups();
+    fetchSignups(true);
 
     // Subscribe to realtime changes
     const channel = supabase
@@ -83,9 +112,10 @@ export default function QueueDisplay() {
       .subscribe();
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, []); // Run once on mount - showToast is stable via context
+  }, [userId]);
 
   useEffect(() => {
     // Fetch user's own signups
@@ -175,10 +205,86 @@ export default function QueueDisplay() {
     );
   };
 
-  if (loading) {
+  // Placeholder court card shown until real data is confirmed.
+  const renderCourtSkeleton = (courtNumber: number) => (
+    <div className="bg-white rounded-lg shadow-md p-4">
+      <h2 className="text-xl font-bold mb-4 text-center text-blue-600">
+        Court {courtNumber}
+      </h2>
+      <div className="animate-pulse space-y-4">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="border border-gray-200 rounded p-3">
+            <div className="h-4 w-1/2 bg-gray-200 rounded mb-3" />
+            <div className="space-y-2">
+              <div className="h-3 w-3/4 bg-gray-100 rounded" />
+              <div className="h-3 w-2/3 bg-gray-100 rounded" />
+              <div className="h-3 w-3/5 bg-gray-100 rounded" />
+              <div className="h-3 w-1/2 bg-gray-100 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (status === 'loading') {
     return (
-      <div className="flex justify-center items-center py-12">
-        <div className="text-xl text-gray-800 font-semibold">Loading queue data...</div>
+      <div className="space-y-8">
+        <div
+          className="text-center text-gray-600"
+          role="status"
+          aria-live="polite"
+        >
+          Loading queue data…
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {COURTS.map(courtNumber => (
+            <div key={courtNumber}>
+              {renderCourtSkeleton(courtNumber)}
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h2 className="text-lg font-semibold mb-3 text-center">Next Available Queue Positions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-pulse">
+            {COURTS.map(courtNumber => (
+              <div key={courtNumber} className="bg-white rounded p-3">
+                <h3 className="font-semibold text-sm text-blue-700 mb-2 text-center">
+                  Court {courtNumber}
+                </h3>
+                <div className="space-y-2">
+                  <div className="h-3 w-2/3 mx-auto bg-gray-100 rounded" />
+                  <div className="h-3 w-2/3 mx-auto bg-gray-100 rounded" />
+                  <div className="h-3 w-2/3 mx-auto bg-gray-100 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="max-w-2xl mx-auto">
+          <SignupForm signups={[]} userId={null} isDataLoading={true} />
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="max-w-2xl mx-auto bg-red-50 border border-red-200 rounded-lg p-6 text-center space-y-3">
+        <h2 className="text-lg font-semibold text-red-800">Could not load the queue</h2>
+        <p className="text-sm text-red-700">
+          The live queue data did not load, so it is being hidden rather than shown
+          as empty. Check your connection and try again.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-6 rounded"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -189,7 +295,7 @@ export default function QueueDisplay() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h2 className="text-lg font-semibold mb-3 text-center">Next Available Queue Positions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(courtNumber => {
+          {COURTS.map(courtNumber => {
             const groups = groupSignupsByCourt(signups, courtNumber);
             const nextPositions = [];
 
@@ -239,7 +345,7 @@ export default function QueueDisplay() {
     <div className="space-y-8">
       {/* Queue Display */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[1, 2, 3].map(courtNumber => (
+        {COURTS.map(courtNumber => (
           <div key={courtNumber}>
             {renderCourt(courtNumber)}
           </div>
