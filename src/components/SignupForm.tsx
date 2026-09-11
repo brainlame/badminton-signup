@@ -274,7 +274,7 @@ export default function SignupForm({ signups, userId, isDataLoading }: SignupFor
 
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-            CMU Email (Optional)
+            CMU Email
           </label>
           <input
             type="email"
@@ -283,6 +283,7 @@ export default function SignupForm({ signups, userId, isDataLoading }: SignupFor
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="andrew@cmu.edu"
+            required
             disabled={loading}
           />
         </div>
