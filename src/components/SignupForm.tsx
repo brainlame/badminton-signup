@@ -45,8 +45,8 @@ export default function SignupForm({ signups, userId, isDataLoading }: SignupFor
       ? Math.max(...groups.map(g => g.groupIndex))
       : -1;
 
-    // Start from the group AFTER the currently playing group
-    const startGroupIndex = minGroupIndex + 1;
+    // Start from the currently playing group
+    const startGroupIndex = minGroupIndex;
 
     // Show at least 5 future groups
     const totalGroupsToShow = Math.max(startGroupIndex + 5, maxGroupIndex + 2);

@@ -40,19 +40,32 @@ export default function QueueDisplay() {
   }, []);
 
   useEffect(() => {
+    // Hide the static loading indicator
+    const staticLoader = document.getElementById('app-loading');
+    if (staticLoader) {
+      staticLoader.style.display = 'none';
+    }
+
     // Fetch all signups
     const fetchSignups = async () => {
-      const { data, error } = await supabase
-        .from('signups')
-        .select('*')
-        .order('created_at', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('signups')
+          .select('*')
+          .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching signups:', error);
-      } else {
-        setSignups(data || []);
+        if (error) {
+          console.error('Error fetching signups:', error);
+          showToast('Failed to load queue data. Please refresh the page.');
+        } else {
+          setSignups(data || []);
+        }
+      } catch (error) {
+        console.error('Exception fetching signups:', error);
+        showToast('Failed to load queue data. Please refresh the page.');
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchSignups();
@@ -72,7 +85,7 @@ export default function QueueDisplay() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     // Fetch user's own signups
@@ -165,7 +178,7 @@ export default function QueueDisplay() {
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
-        <div className="text-gray-600">Loading queue...</div>
+        <div className="text-xl text-gray-800 font-semibold">Loading queue data...</div>
       </div>
     );
   }

@@ -32,16 +32,5 @@ import { ToastProvider } from '../lib/ToastContext';
 				<a href="/admin" class="hover:text-gray-700 underline">Admin Login</a>
 			</footer> -->
 		</div>
-		<script>
-			// Hide the loading message once React mounts
-			document.addEventListener('DOMContentLoaded', () => {
-				setTimeout(() => {
-					const loadingEl = document.getElementById('app-loading');
-					if (loadingEl) {
-						loadingEl.style.display = 'none';
-					}
-				}, 100);
-			});
-		</script>
 	</body>
 </html>
