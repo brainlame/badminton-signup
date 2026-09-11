@@ -20,14 +20,28 @@ import { ToastProvider } from '../lib/ToastContext';
 			</header>
 
 			<main>
+				<div id="app-loading" class="flex justify-center items-center py-12">
+					<div class="text-gray-600">Loading...</div>
+				</div>
 				<ToastProvider client:only="react">
-				<QueueDisplay client:load />
-			</ToastProvider>
+					<QueueDisplay client:only="react" />
+				</ToastProvider>
 			</main>
 
 			<!-- <footer class="text-center mt-12 text-sm text-gray-500">
 				<a href="/admin" class="hover:text-gray-700 underline">Admin Login</a>
 			</footer> -->
 		</div>
+		<script>
+			// Hide the loading message once React mounts
+			document.addEventListener('DOMContentLoaded', () => {
+				setTimeout(() => {
+					const loadingEl = document.getElementById('app-loading');
+					if (loadingEl) {
+						loadingEl.style.display = 'none';
+					}
+				}, 100);
+			});
+		</script>
 	</body>
 </html>

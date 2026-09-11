@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { groupSignupsByCourt } from '../lib/queue';
 import type { SignupInsert, Signup } from '../lib/types';
@@ -7,12 +7,14 @@ import { useToast } from '../lib/ToastContext';
 interface SignupFormProps {
   signups: Signup[];
   userId: string | null;
+  isDataLoading: boolean;
 }
 
-export default function SignupForm({ signups, userId }: SignupFormProps) {
+export default function SignupForm({ signups, userId, isDataLoading }: SignupFormProps) {
   const { showToast } = useToast();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
   const [courtNumber, setCourtNumber] = useState<number>(1);
   const [queuePosition, setQueuePosition] = useState<number>(0);
   const [loading, setLoading] = useState(false);
@@ -22,30 +24,52 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
   const getAvailablePositions = () => {
     const groups = groupSignupsByCourt(signups, courtNumber);
     const positions = [];
+    const groupIndexMap = new Map<number, { players: number; isFull: boolean }>();
 
-    // Add existing groups
+    // Find the minimum group index (currently playing group)
+    const minGroupIndex = groups.length > 0
+      ? Math.min(...groups.map(g => g.groupIndex))
+      : 0;
+
+    // Build a map of existing groups
     groups.forEach((group) => {
       const isFull = group.players.length >= 4;
-      positions.push({
-        value: group.groupIndex,
-        label: `${group.label} ${isFull ? '(Full)' : `(${group.players.length}/4)`}`,
+      groupIndexMap.set(group.groupIndex, {
+        players: group.players.length,
         isFull,
       });
     });
 
-    // Add future groups up to a total of 5 groups
-    const totalGroupsToShow = 5;
-    for (let i = groups.length; i < totalGroupsToShow; i++) {
-      const label = i === 0 ? 'Now Playing' :
-                    i === 1 ? 'Up Next' :
-                    i === 2 ? 'On Deck' :
-                    `Group ${i + 1}`;
+    // Get the highest group index
+    const maxGroupIndex = groups.length > 0
+      ? Math.max(...groups.map(g => g.groupIndex))
+      : -1;
 
-      positions.push({
-        value: i,
-        label: `${label} (0/4)`,
-        isFull: false,
-      });
+    // Start from the group AFTER the currently playing group
+    const startGroupIndex = minGroupIndex + 1;
+
+    // Show at least 5 future groups
+    const totalGroupsToShow = Math.max(startGroupIndex + 5, maxGroupIndex + 2);
+
+    for (let groupIndex = startGroupIndex; groupIndex < totalGroupsToShow; groupIndex++) {
+      const groupData = groupIndexMap.get(groupIndex);
+      const label = `Group ${groupIndex + 1}`;
+
+      if (groupData) {
+        // Existing group with players
+        positions.push({
+          value: groupIndex,
+          label: `${label} ${groupData.isFull ? '(Full)' : `(${groupData.players}/4)`}`,
+          isFull: groupData.isFull,
+        });
+      } else {
+        // Empty future group
+        positions.push({
+          value: groupIndex,
+          label: `${label} (0/4)`,
+          isFull: false,
+        });
+      }
     }
 
     return positions;
@@ -53,12 +77,26 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
 
   const availablePositions = getAvailablePositions();
 
+  // Auto-select the first available position when court changes or positions change
+  useEffect(() => {
+    if (availablePositions.length > 0 && availablePositions[0]) {
+      setQueuePosition(availablePositions[0].value);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courtNumber, signups]); // availablePositions is derived from signups, so we don't need it in deps
+
   // Note: We no longer manipulate timestamps when using group_index.
   // The group_index field determines which group you're in,
   // and created_at (natural insertion time) determines order within that group.
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent submission if data is still loading
+    if (isDataLoading) {
+      showToast('Please wait for queue data to load');
+      return;
+    }
 
     if (!firstName.trim() || !lastName.trim()) {
       showToast('Please enter your first and last name');
@@ -68,6 +106,15 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
     if (firstName.length > 50 || lastName.length > 50) {
       showToast('Names must be less than 50 characters');
       return;
+    }
+
+    // Validate email if provided (optional field, but must end in @andrew.cmu.edu)
+    if (email.trim()) {
+      const emailRegex = /^[A-Za-z0-9._%+-]+@andrew\.cmu\.edu$/i;
+      if (!emailRegex.test(email.trim())) {
+        showToast('Please enter a valid CMU email address (@cmu.edu)');
+        return;
+      }
     }
 
     // Check if selected group is full
@@ -80,10 +127,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
     const playersInGroup = courtSignups.filter(s => (s.group_index ?? 0) === groupIndex).length;
 
     if (playersInGroup >= 4) {
-      const groupLabel = groupIndex === 0 ? 'Now Playing' :
-                        groupIndex === 1 ? 'Up Next' :
-                        groupIndex === 2 ? 'On Deck' :
-                        `Group ${groupIndex + 1}`;
+      const groupLabel = `Group ${groupIndex + 1}`;
       showToast(`${groupLabel} is full. Please select a different group.`);
       return;
     }
@@ -92,6 +136,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
 
     // Ensure we have a valid user session (create anonymous if needed)
     let currentUserId = userId;
+
     if (!currentUserId) {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -136,6 +181,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
       const insertData: SignupInsert = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
+        email: email.trim() || null, // Store null if empty
         court_number: courtNumber,
         created_by: currentUserId,
         group_index: queuePosition, // Always include group_index - it's a required field in the schema
@@ -152,16 +198,21 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
       setSubmitted(true);
 
       // Calculate the group label for the success message
-      const groupIndex = queuePosition;
-      const groupLabel = groupIndex === 0 ? 'Now Playing' :
-                        groupIndex === 1 ? 'Up Next' :
-                        groupIndex === 2 ? 'On Deck' :
-                        `Group ${groupIndex + 1}`;
+      const groupLabel = `Group ${queuePosition + 1}`;
 
       showToast(`Successfully signed up for Court ${courtNumber} - ${groupLabel}. Refresh to view changes.`);
     } catch (error) {
       console.error('Error signing up:', error);
-      showToast('Failed to sign up. Please try again.');
+
+      // More detailed error message
+      let errorMessage = 'Failed to sign up. ';
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage += (error as any).message;
+      } else {
+        errorMessage += 'Please try again.';
+      }
+
+      showToast(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -170,6 +221,18 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
   // Don't show form if already submitted - parent will handle this
   if (submitted) {
     return null;
+  }
+
+  // Show loading state while data is being fetched
+  if (isDataLoading) {
+    return (
+      <div className="bg-white rounded-lg shadow-md p-6 max-w-md mx-auto">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Sign Up for a Court</h2>
+        <div className="flex justify-center items-center py-12">
+          <div className="text-gray-600">Loading queue data...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -210,6 +273,21 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
         </div>
 
         <div>
+          <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            CMU Email (Optional)
+          </label>
+          <input
+            type="email"
+            id="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="andrew@cmu.edu"
+            disabled={loading}
+          />
+        </div>
+
+        <div>
           <label htmlFor="courtNumber" className="block text-sm font-medium text-gray-700 mb-1">
             Court Number
           </label>
@@ -219,8 +297,7 @@ export default function SignupForm({ signups, userId }: SignupFormProps) {
             onChange={(e) => {
               const newCourt = Number(e.target.value);
               setCourtNumber(newCourt);
-              // Reset to first available position for the new court
-              setQueuePosition(0);
+              // Queue position will be auto-updated by useEffect
             }}
             className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             disabled={loading}

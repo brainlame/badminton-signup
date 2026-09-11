@@ -14,6 +14,7 @@ export interface Database {
           id: string
           first_name: string
           last_name: string
+          email: string | null
           court_number: number
           group_index: number
           status: 'waiting' | 'done'
@@ -24,6 +25,7 @@ export interface Database {
           id?: string
           first_name: string
           last_name: string
+          email?: string | null
           court_number: number
           group_index?: number
           status?: 'waiting' | 'done'
@@ -34,6 +36,7 @@ export interface Database {
           id?: string
           first_name?: string
           last_name?: string
+          email?: string | null
           court_number?: number
           group_index?: number
           status?: 'waiting' | 'done'

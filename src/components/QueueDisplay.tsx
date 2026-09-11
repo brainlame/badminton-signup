@@ -122,10 +122,19 @@ export default function QueueDisplay() {
             {visibleGroups.map((group) => (
               <div
                 key={`court-${courtNumber}-group-${group.groupIndex}`}
-                className="mb-4 border border-gray-200 rounded p-3"
+                className={`mb-4 border rounded p-3 ${
+                  group.isCurrentlyPlaying
+                    ? 'border-green-500 bg-green-50 border-2'
+                    : 'border-gray-200'
+                }`}
               >
-                <h3 className="font-semibold text-sm text-gray-700 mb-2">
+                <h3 className={`font-semibold text-sm mb-2 ${
+                  group.isCurrentlyPlaying
+                    ? 'text-green-700'
+                    : 'text-gray-700'
+                }`}>
                   {group.label} ({group.players.length}/4)
+                  {group.isCurrentlyPlaying && ' - Currently Playing'}
                 </h3>
                 <ul className="space-y-1">
                   {group.players.map((player) => (
@@ -171,13 +180,26 @@ export default function QueueDisplay() {
             const groups = groupSignupsByCourt(signups, courtNumber);
             const nextPositions = [];
 
-            // Get next 3 available positions
+            // Create a map of group index to player count
+            const groupPlayerCount = new Map<number, number>();
+            groups.forEach(group => {
+              groupPlayerCount.set(group.groupIndex, group.players.length);
+            });
+
+            // Find the minimum group index (currently playing)
+            const minGroupIndex = groups.length > 0
+              ? Math.min(...groups.map(g => g.groupIndex))
+              : 0;
+
+            // Start from the group AFTER currently playing
+            const startGroupIndex = minGroupIndex + 1;
+
+            // Get next 3 available positions after the currently playing group
             for (let i = 0; i < 3; i++) {
-              const groupIndex = groups.length + i;
-              const label = i === 0
-                ? (groups.length === 0 ? 'Now Playing' : `Group ${groupIndex + 1}`)
-                : `Group ${groupIndex + 1}`;
-              nextPositions.push({ groupIndex, label });
+              const groupIndex = startGroupIndex + i;
+              const label = `Group ${groupIndex + 1}`;
+              const playerCount = groupPlayerCount.get(groupIndex) || 0;
+              nextPositions.push({ groupIndex, label, playerCount });
             }
 
             return (
@@ -188,7 +210,7 @@ export default function QueueDisplay() {
                 <ul className="space-y-1 text-sm">
                   {nextPositions.map((pos, idx) => (
                     <li key={pos.groupIndex} className="text-gray-700">
-                      {idx === 0 ? '→ ' : '  '}{pos.label} (0/4)
+                      {idx === 0 ? '→ ' : '  '}{pos.label} ({pos.playerCount}/4)
                     </li>
                   ))}
                 </ul>
@@ -248,7 +270,7 @@ export default function QueueDisplay() {
       {/* Signup Form - Only show if user doesn't have an active signup */}
       {mySignups.length === 0 ? (
         <div className="max-w-2xl mx-auto">
-          <SignupForm signups={signups} userId={userId} />
+          <SignupForm signups={signups} userId={userId} isDataLoading={loading} />
         </div>
       ) : (
         <div className="max-w-2xl mx-auto bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">

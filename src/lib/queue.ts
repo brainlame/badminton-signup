@@ -4,9 +4,8 @@ export interface QueueGroup {
   groupIndex: number;
   players: Signup[];
   label: string;
+  isCurrentlyPlaying: boolean; // First group in the queue
 }
-
-const GROUP_LABELS = ['Now Playing', 'Up Next', 'On Deck'];
 
 export function groupSignupsByCourt(signups: Signup[], courtNumber: number): QueueGroup[] {
   const courtSignups = signups
@@ -36,12 +35,13 @@ export function groupSignupsByCourt(signups: Signup[], courtNumber: number): Que
     // Convert map to array and sort by group index
     const groups: QueueGroup[] = Array.from(groupMap.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([groupIndex, players]) => {
-        const label = GROUP_LABELS[groupIndex] || `Group ${groupIndex + 1}`;
+      .map(([groupIndex, players], index) => {
+        const label = `Group ${groupIndex + 1}`;
         return {
           groupIndex,
           players,
           label,
+          isCurrentlyPlaying: index === 0, // First group is currently playing
         };
       });
 
@@ -53,12 +53,13 @@ export function groupSignupsByCourt(signups: Signup[], courtNumber: number): Que
     for (let i = 0; i < courtSignups.length; i += 4) {
       const groupIndex = Math.floor(i / 4);
       const players = courtSignups.slice(i, i + 4);
-      const label = GROUP_LABELS[groupIndex] || `Group ${groupIndex + 1}`;
+      const label = `Group ${groupIndex + 1}`;
 
       groups.push({
         groupIndex,
         players,
         label,
+        isCurrentlyPlaying: groupIndex === 0, // First group is currently playing
       });
     }
 
@@ -76,7 +77,7 @@ export function getQueuePosition(signups: Signup[], courtNumber: number, signupI
   if (hasGroupIndex) {
     // New system: Use stored group_index
     const groupIndex = signup.group_index ?? 0;
-    const label = GROUP_LABELS[groupIndex] || `Group ${groupIndex + 1}`;
+    const label = `Group ${groupIndex + 1}`;
 
     // Find position within the group
     const groupSignups = signups
@@ -99,7 +100,7 @@ export function getQueuePosition(signups: Signup[], courtNumber: number, signupI
     if (index === -1) return null;
 
     const groupIndex = Math.floor(index / 4);
-    const label = GROUP_LABELS[groupIndex] || `Group ${groupIndex + 1}`;
+    const label = `Group ${groupIndex + 1}`;
 
     return {
       group: label,
