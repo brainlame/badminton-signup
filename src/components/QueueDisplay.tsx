@@ -85,7 +85,7 @@ export default function QueueDisplay() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [showToast]);
+  }, []); // Run once on mount - showToast is stable via context
 
   useEffect(() => {
     // Fetch user's own signups

@@ -7,6 +7,9 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
+// Stable fallback for when provider is missing (e.g., SSR)
+const NOOP_TOAST: ToastContextType = { showToast: () => {} };
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<{ message: string; duration: number } | null>(null);
 
@@ -34,9 +37,5 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export function useToast() {
   const context = useContext(ToastContext);
-  if (!context) {
-    // Return no-op function for SSR or when provider is missing
-    return { showToast: () => {} };
-  }
-  return context;
+  return context || NOOP_TOAST;
 }
