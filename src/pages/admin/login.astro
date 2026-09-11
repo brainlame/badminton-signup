@@ -1,6 +1,5 @@
 ---
-import AppWithToast from '../../components/AppWithToast';
-import AdminLogin from '../../components/AdminLogin';
+import AdminLoginApp from '../../components/AdminLoginApp';
 ---
 
 <html lang="en">
@@ -20,9 +19,7 @@ import AdminLogin from '../../components/AdminLogin';
 			</header>
 
 			<main>
-				<AppWithToast client:only="react">
-					<AdminLogin />
-				</AppWithToast>
+				<AdminLoginApp client:only="react" />
 			</main>
 		</div>
 	</body>

@@ -1,6 +1,5 @@
 ---
-import AppWithToast from '../../components/AppWithToast';
-import AdminPanel from '../../components/AdminPanel';
+import AdminPanelApp from '../../components/AdminPanelApp';
 ---
 
 <html lang="en">
@@ -20,9 +19,7 @@ import AdminPanel from '../../components/AdminPanel';
 			</header>
 
 			<main>
-				<AppWithToast client:only="react">
-					<AdminPanel />
-				</AppWithToast>
+				<AdminPanelApp client:only="react" />
 			</main>
 		</div>
 	</body>

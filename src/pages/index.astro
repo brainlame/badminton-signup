@@ -1,6 +1,5 @@
 ---
-import AppWithToast from '../components/AppWithToast';
-import QueueDisplay from '../components/QueueDisplay';
+import QueueApp from '../components/QueueApp';
 ---
 
 <html lang="en">
@@ -23,9 +22,7 @@ import QueueDisplay from '../components/QueueDisplay';
 				<div id="app-loading" class="flex justify-center items-center py-12">
 					<div class="text-gray-600">Loading...</div>
 				</div>
-				<AppWithToast client:only="react">
-					<QueueDisplay />
-				</AppWithToast>
+				<QueueApp client:only="react" />
 			</main>
 
 			<!-- <footer class="text-center mt-12 text-sm text-gray-500">
