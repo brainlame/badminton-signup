@@ -240,7 +240,7 @@ export default function SignupForm({ signups, userId, isDataLoading }: SignupFor
       <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">This Form is Closed</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* <div>
+        <div>
           <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
             First Name
           </label>
@@ -326,15 +326,15 @@ export default function SignupForm({ signups, userId, isDataLoading }: SignupFor
               </option>
             ))}
           </select>
-        </div> */}
+        </div>
 
-        {/* <button
+        <button
           type="submit"
-          disabled={loading}
+          disabled={true}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Signing up...' : 'Sign Up'}
-        </button> */}
+        </button>
       </form>
     </div>
   );
