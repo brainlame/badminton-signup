@@ -244,7 +244,7 @@ export default function AdminPanel() {
                       </button>
                     </li>
                   ))}
-                  {[...Array(4 - group.players.length)].map((_, i) => (
+                  {[...Array(Math.max(0, 4 - group.players.length))].map((_, i) => (
                     <li key={`empty-${i}`} className="text-sm text-gray-400 italic">
                       (open)
                     </li>
